@@ -8,6 +8,7 @@ version v0.90.0
 
 # SYNOPSIS
 
+    use Test2::Tools::Basic;
     use Test2::Tools::TypeTiny;
     use MyTypes qw< FullyQualifiedDomainName >;
 
@@ -41,43 +42,17 @@ version v0.90.0
         );
     };
 
+    done_testing;
+
 # DESCRIPTION
 
 This module provides a set of tools for checking [Type::Tiny](https://metacpan.org/pod/Type%3A%3ATiny) types.  This is similar to
 [Test::TypeTiny](https://metacpan.org/pod/Test%3A%3ATypeTiny), but works against the [Test2::Suite](https://metacpan.org/pod/Test2%3A%3ASuite) and has more functionality for testing
 and troubleshooting coercions.
 
-It also comes with a standard set of imports, to make your `use` list more compact.
-
-# EXPORTS
-
-This module uses [Import::Base](https://metacpan.org/pod/Import%3A%3ABase) to load pragmas.
-
-## Defaults
-
-This module loads in a bunch of pragmas and includes a default set of exports.  A single call to
-`use Test2::Tools::TypeTiny` is roughly equivalent to the following:
-
-    # Pragmas
-    use v5.18;
-    use strict;
-    use warnings;
-    use utf8;
-    use open      qw< :std :utf8 >;
-    use filetest  'access';
-    use charnames qw< :full :short >;
-
-    # Exports
-    use Test2::Tools::Basic;
-    use Test2::Tools::TypeTiny qw< Default >;  # all documented functions
-
-You can use the special bundle of `NoExports` to start off fresh.  (Pragmas will still be loaded
-in.)
-
-    use Test2::Tools::TypeTiny qw< NoExports type_subtest >;
-    use Test2::Tools::Basic    qw< plan done_testing >;
-
 # FUNCTIONS
+
+All functions are exported by default.
 
 ## Wrappers
 
@@ -220,7 +195,7 @@ Grant Street Group <developers@grantstreet.com>
 
 # COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2024 by Grant Street Group.
+This software is Copyright (c) 2024 - 2025 by Grant Street Group.
 
 This is free software, licensed under:
 
