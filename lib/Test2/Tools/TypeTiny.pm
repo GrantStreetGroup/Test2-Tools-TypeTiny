@@ -40,10 +40,6 @@ use namespace::clean;
                 llanfairpwllgwyngllgogerychwyrndrobwllllantysiliogogogoch.co.uk
             >,
         );
-        should_fail_initially(
-            $type,
-            qw< www ftp001 ftp001-prod3 .com domains.t x.c >,
-        );
         should_fail(
             $type,
             qw< www ftp001 .com domains.t x.c prod|ask|me -prod3.example.com >,
@@ -154,6 +150,10 @@ sub _should_pass_initially_subtest {
 
 Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will fail with
 all of the given C<@values>, without using any coercions.
+
+This function is included for completeness.  However, items in C<should_fail_initially> should
+realistically end up in either a L</should_fail> block (if it always fails, even with coercions) or
+a L</should_coerce_into> block (if it would pass after coercions).
 
 =cut
 
