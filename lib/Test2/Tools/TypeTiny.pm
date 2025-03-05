@@ -9,7 +9,7 @@ use warnings;
 
 use parent 'Exporter';
 
-use List::Util v1.29 qw< uniq pairmap >;
+use List::Util v1.29 qw< uniq pairmap pairs >;
 use Scalar::Util     qw< refaddr >;
 
 use Test2::API            qw< context run_subtest >;
@@ -327,13 +327,11 @@ sub should_coerce_into {
 sub _should_coerce_into_subtest {
     my ($type, @kv_pairs) = @_;
 
-    my %old_new    = @kv_pairs;
-    my @old_values = pairmap { $a } @kv_pairs;
+    plan int( scalar(@kv_pairs) / 2 );
 
-    plan scalar @old_values;
+    foreach my $kv (pairs @kv_pairs) {
+        my ($value, $expected) = @$kv;
 
-    foreach my $value (@old_values) {
-        my $expected    = $old_new{$value};
         my $val_dd      = _dd($value);
         my @val_explain = _constraint_type_check_debug_map($type, $value);
 
