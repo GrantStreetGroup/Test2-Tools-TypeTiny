@@ -4,7 +4,7 @@ Test2::Tools::TypeTiny - Test2 tools for checking Type::Tiny types
 
 # VERSION
 
-version v0.90.2
+version v0.91.0
 
 # SYNOPSIS
 
