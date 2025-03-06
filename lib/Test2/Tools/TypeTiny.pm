@@ -122,6 +122,10 @@ sub type_subtest ($&) {
 
 These functions are most useful wrapped inside of a L</type_subtest> coderef.
 
+Note that most of these checks will run through C<get_message> and C<validate_explain> calls to
+confirm the coderefs don't die.  If you need to validate the error messages themselves, consider
+using checks similar to the ones in the L</SYNOPSIS>.
+
 =head3 should_pass_initially
 
     should_pass_initially($type, @values);
@@ -152,6 +156,8 @@ sub _should_pass_initially_subtest {
     foreach my $value (@values) {
         my $val_dd      = _dd($value);
         my @val_explain = _constraint_type_check_debug_map($type, $value);
+        _check_error_message_methods($type, $value);
+
         ok $type->check($value), "$val_dd should pass", @val_explain;
     }
 }
@@ -190,6 +196,8 @@ sub _should_fail_initially_subtest {
     foreach my $value (@values) {
         my $val_dd      = _dd($value);
         my @val_explain = _constraint_type_check_debug_map($type, $value);
+        _check_error_message_methods($type, $value);
+
         ok !$type->check($value), "$val_dd should fail", @val_explain;
     }
 }
@@ -229,6 +237,7 @@ sub _should_pass_subtest {
     foreach my $value (@values) {
         my $val_dd      = _dd($value);
         my @val_explain = _constraint_type_check_debug_map($type, $value);
+        _check_error_message_methods($type, $value);
 
         if ($type->check($value)) {
             pass "$val_dd should pass (initial check)", @val_explain;
@@ -247,6 +256,7 @@ sub _should_pass_subtest {
             fail "$val_dd should pass (failed coercion)", @val_explain, @coercion_debug;
             next;
         }
+        _check_error_message_methods($type, $new_value);
 
         # final check
         @val_explain = _constraint_type_check_debug_map($type, $new_value);
@@ -284,6 +294,7 @@ sub _should_fail_subtest {
     foreach my $value (@values) {
         my $val_dd      = _dd($value);
         my @val_explain = _constraint_type_check_debug_map($type, $value);
+        _check_error_message_methods($type, $value);
 
         if ($type->check($value)) {
             fail "$val_dd should fail (initial check)", @val_explain;
@@ -302,6 +313,7 @@ sub _should_fail_subtest {
             pass "$val_dd should fail (failed coercion)", @val_explain, @coercion_debug;
             next;
         }
+        _check_error_message_methods($type, $new_value);
 
         # final check
         @val_explain = _constraint_type_check_debug_map($type, $new_value);
@@ -346,6 +358,7 @@ sub _should_coerce_into_subtest {
 
         my $val_dd      = _dd($value);
         my @val_explain = _constraint_type_check_debug_map($type, $value);
+        _check_error_message_methods($type, $value);
 
         if ($type->check($value)) {
             fail "$val_dd should fail (initial check)";
@@ -364,6 +377,7 @@ sub _should_coerce_into_subtest {
             fail "$val_dd should coerce", @val_explain, @coercion_debug;
             next;
         }
+        _check_error_message_methods($type, $new_value);
 
         # make sure it matches the expected value
         @val_explain = _constraint_type_check_debug_map($type, $new_value);
@@ -503,6 +517,14 @@ sub _check_coercion {
 
     # returns true if it was coerced
     return $old_value ne $new_value;
+}
+
+sub _check_error_message_methods {
+    my ($type, $value) = @_;
+
+    # If it dies, we just let it naturally die
+    $type->get_message($value);
+    $type->validate_explain($value);  # will return undef on good values
 }
 
 =head1 TROUBLESHOOTING
