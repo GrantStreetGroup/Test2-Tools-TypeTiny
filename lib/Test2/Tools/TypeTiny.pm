@@ -9,12 +9,13 @@ use warnings;
 
 use parent 'Exporter';
 
-use List::Util v1.29 qw< uniq pairmap pairs >;
+use List::Util v1.29 qw< uniq shuffle pairmap pairs >;
 use Scalar::Util     qw< refaddr >;
 
 use Test2::API            qw< context run_subtest >;
 use Test2::Tools::Basic;
-use Test2::Tools::Compare qw< is >;
+use Test2::Tools::Compare qw< is like >;
+use Test2::Compare        qw< compare strict_convert >;
 
 use Data::Dumper;
 
@@ -24,8 +25,9 @@ use namespace::clean;
 
 =head1 SYNOPSIS
 
-    use Test2::Tools::Basic;
+    use Test2::V0;
     use Test2::Tools::TypeTiny;
+
     use MyTypes qw< FullyQualifiedDomainName >;
 
     type_subtest FullyQualifiedDomainName, sub {
@@ -52,6 +54,15 @@ use namespace::clean;
                 nonprod3-foobar-me          nonprod3-foobar-me.ourdomain.com
             >,
         );
+        should_sort_into(
+            $type,
+            [qw< ftp001-prod3 ftp001-prod3.ourdomain.com prod-ask-me.ourdomain.com >],
+        );
+
+        like $type->get_message(undef), qr<Must be a valid FQDN>, 'error message is correct';
+        like $type->validate_explain(undef), [
+            qr<Undef did not pass type constraint>,
+        ], 'deep explanation is correct';
     };
 
     done_testing;
@@ -70,7 +81,8 @@ All functions are exported by default.
 
 our @EXPORT_OK = (qw<
     type_subtest
-    should_pass_initially should_fail_initially should_pass should_fail should_coerce_into
+    should_pass_initially should_fail_initially should_pass should_fail
+    should_coerce_into should_sort_into
 >);
 our @EXPORT = @EXPORT_OK;
 
@@ -356,6 +368,66 @@ sub _should_coerce_into_subtest {
         # make sure it matches the expected value
         @val_explain = _constraint_type_check_debug_map($type, $new_value);
         is $new_value, $expected, "$val_dd (coerced)", @val_explain, @coercion_debug;
+    }
+}
+
+
+=head3 should_sort_into
+
+    should_sort_into($type, @sorted_arrayrefs);
+
+Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will sort
+into the expected lists given.  The input list is a shuffled version of the sorted list.
+
+Because this introduces some non-deterministic behavior to the test, it will run through 100 cycles
+of shuffling and sorting to confirm the results.  A good sorter should always return a
+deterministic result for a given list, with enough fallbacks to account for every unique case.
+Any failure will immediate stop the loop and return both the shuffled input and output list in the
+failure output, so that you can temporarily test in a more deterministic manner, as you debug the
+fault.
+
+=cut
+
+sub should_sort_into {
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'should sort into',
+        \&_should_sort_into_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _should_sort_into_subtest {
+    my ($type, @sorted_lists) = @_;
+
+    plan scalar(@sorted_lists);
+
+    foreach my $sorted_list (@sorted_lists) {
+        my @expected_sort = @$sorted_list;
+
+        my $val_dd = _dd(\@expected_sort);
+
+        my (@shuffled, @sorted);
+        foreach my $i (1..100) {
+            @shuffled = shuffle @expected_sort;
+            @sorted   = $type->sort(@shuffled);
+
+            # To hide all of these iterations, we'll compare with 'compare' first, and if it's a failure,
+            # we'll use 'is' to advertise the failure.
+            my $delta = compare(\@sorted, \@expected_sort, \&strict_convert);
+            last if $delta;  # let 'is' fail
+        }
+
+        # pass or fail
+        my @io_explain = (
+            "Shuffled Input:   "._dd(\@shuffled),
+            "Resulting Output: "._dd(\@sorted),
+        );
+        is \@sorted, \@expected_sort, $val_dd, @io_explain;
     }
 }
 
