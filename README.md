@@ -4,7 +4,7 @@ Test2::Tools::TypeTiny - Test2 tools for checking Type::Tiny types
 
 # VERSION
 
-version v0.90.0
+version v0.90.1
 
 # SYNOPSIS
 
@@ -23,10 +23,6 @@ version v0.90.0
                 www123.prod.some.domain.example.com
                 llanfairpwllgwyngllgogerychwyrndrobwllllantysiliogogogoch.co.uk
             >,
-        );
-        should_fail_initially(
-            $type,
-            qw< www ftp001 ftp001-prod3 .com domains.t x.c >,
         );
         should_fail(
             $type,
@@ -86,6 +82,10 @@ all of the given `@values`, without any need for coercions.
 
 Creates a [buffered subtest](https://metacpan.org/pod/Test2%3A%3ATools%3A%3ASubtest#BUFFERED) that confirms the type will fail with
 all of the given `@values`, without using any coercions.
+
+This function is included for completeness.  However, items in `should_fail_initially` should
+realistically end up in either a ["should\_fail"](#should_fail) block (if it always fails, even with coercions) or
+a ["should\_coerce\_into"](#should_coerce_into) block (if it would pass after coercions).
 
 ### should\_pass
 

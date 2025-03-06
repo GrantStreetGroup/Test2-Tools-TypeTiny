@@ -9,7 +9,7 @@ use warnings;
 
 use parent 'Exporter';
 
-use List::Util v1.29 qw< uniq pairmap >;
+use List::Util v1.29 qw< uniq pairmap pairs >;
 use Scalar::Util     qw< refaddr >;
 
 use Test2::API            qw< context run_subtest >;
@@ -39,10 +39,6 @@ use namespace::clean;
                 www123.prod.some.domain.example.com
                 llanfairpwllgwyngllgogerychwyrndrobwllllantysiliogogogoch.co.uk
             >,
-        );
-        should_fail_initially(
-            $type,
-            qw< www ftp001 ftp001-prod3 .com domains.t x.c >,
         );
         should_fail(
             $type,
@@ -154,6 +150,10 @@ sub _should_pass_initially_subtest {
 
 Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will fail with
 all of the given C<@values>, without using any coercions.
+
+This function is included for completeness.  However, items in C<should_fail_initially> should
+realistically end up in either a L</should_fail> block (if it always fails, even with coercions) or
+a L</should_coerce_into> block (if it would pass after coercions).
 
 =cut
 
@@ -327,13 +327,11 @@ sub should_coerce_into {
 sub _should_coerce_into_subtest {
     my ($type, @kv_pairs) = @_;
 
-    my %old_new    = @kv_pairs;
-    my @old_values = pairmap { $a } @kv_pairs;
+    plan int( scalar(@kv_pairs) / 2 );
 
-    plan scalar @old_values;
+    foreach my $kv (pairs @kv_pairs) {
+        my ($value, $expected) = @$kv;
 
-    foreach my $value (@old_values) {
-        my $expected    = $old_new{$value};
         my $val_dd      = _dd($value);
         my @val_explain = _constraint_type_check_debug_map($type, $value);
 
