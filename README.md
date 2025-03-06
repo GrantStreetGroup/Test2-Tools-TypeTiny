@@ -4,12 +4,13 @@ Test2::Tools::TypeTiny - Test2 tools for checking Type::Tiny types
 
 # VERSION
 
-version v0.90.1
+version v0.90.2
 
 # SYNOPSIS
 
-    use Test2::Tools::Basic;
+    use Test2::V0;
     use Test2::Tools::TypeTiny;
+
     use MyTypes qw< FullyQualifiedDomainName >;
 
     type_subtest FullyQualifiedDomainName, sub {
@@ -36,6 +37,15 @@ version v0.90.1
                 nonprod3-foobar-me          nonprod3-foobar-me.ourdomain.com
             >,
         );
+        should_sort_into(
+            $type,
+            [qw< ftp001-prod3 ftp001-prod3.ourdomain.com prod-ask-me.ourdomain.com >],
+        );
+
+        like $type->get_message(undef), qr<Must be a valid FQDN>, 'error message is correct';
+        like $type->validate_explain(undef), [
+            qr<Undef did not pass type constraint>,
+        ], 'deep explanation is correct';
     };
 
     done_testing;
@@ -68,6 +78,10 @@ type within the code.
 ## Testers
 
 These functions are most useful wrapped inside of a ["type\_subtest"](#type_subtest) coderef.
+
+Note that most of these checks will run through `get_message` and `validate_explain` calls to
+confirm the coderefs don't die.  If you need to validate the error messages themselves, consider
+using checks similar to the ones in the ["SYNOPSIS"](#synopsis).
 
 ### should\_pass\_initially
 
@@ -117,6 +131,20 @@ ref values as the "key".)
 
 The original value should not pass initial checks, as it would not be coerced in most use cases.
 These would be considered test failures.
+
+### should\_sort\_into
+
+    should_sort_into($type, @sorted_arrayrefs);
+
+Creates a [buffered subtest](https://metacpan.org/pod/Test2%3A%3ATools%3A%3ASubtest#BUFFERED) that confirms the type will sort
+into the expected lists given.  The input list is a shuffled version of the sorted list.
+
+Because this introduces some non-deterministic behavior to the test, it will run through 100 cycles
+of shuffling and sorting to confirm the results.  A good sorter should always return a
+deterministic result for a given list, with enough fallbacks to account for every unique case.
+Any failure will immediate stop the loop and return both the shuffled input and output list in the
+failure output, so that you can temporarily test in a more deterministic manner, as you debug the
+fault.
 
 # TROUBLESHOOTING
 
