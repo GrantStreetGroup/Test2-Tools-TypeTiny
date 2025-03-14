@@ -71,10 +71,16 @@ use namespace::clean;
             [0.2], qr<Parameter for .+ is not a positive int>,
         );
 
-        like $type->get_message(undef), qr<Must be a valid FQDN>, 'error message is correct';
-        like $type->validate_explain(undef), [
-            qr<Undef did not pass type constraint>,
-        ], 'deep explanation is correct';
+        message_should_report_as(
+            $type,
+            undef, qr<Must be a valid FQDN>
+        );
+        explanation_should_report_as(
+            $type,
+            undef, [
+                qr<Undef did not pass type constraint>,
+            ],
+        );
     };
 
     done_testing;
@@ -95,6 +101,7 @@ our @EXPORT_OK = (qw<
     type_subtest
     should_pass_initially should_fail_initially should_pass should_fail should_coerce_into
     parameters_should_create_type parameters_should_die_as
+    message_should_report_as explanation_should_report_as
     should_sort_into
 >);
 our @EXPORT = @EXPORT_OK;
@@ -562,6 +569,113 @@ sub _parameters_should_die_as_subtest {
             $expected,
             $val_dd,
         );
+    }
+}
+
+=head3 message_should_report_as
+
+    message_should_report_as($type, @value_message_regex_pairs);
+    message_should_report_as($type,
+        # values       # messages
+        1,             qr<Must be a fully-qualified domain name, not 1>,
+        undef,         qr!Must be a fully-qualified domain name, not <undef>!,
+        # valid value; checking message, anyway
+        'example.com', qr<Must be a fully-qualified domain name, not example.com>,
+    );
+
+Creates a subtest that confirms error message output against the value.  Technically,
+L<Type::Tiny/get_message> works for valid values, too, so this isn't actually trapping assertion
+failures, just checking the output of that method.
+
+The RHS should be an regular expression, but it can be anything that L<like|Test2::Tools::Compare>
+accepts.
+
+=cut
+
+sub message_should_report_as {
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'message should report as',
+        \&_message_should_report_as_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _message_should_report_as_subtest {
+    my ($type, @pairs) = @_;
+
+    plan int( scalar(@pairs) / 2 );
+
+    foreach my $pair (pairs @pairs) {
+        my ($value, $message_check) = @$pair;
+        my $val_dd = _dd($value);
+
+        my $message_got = $type->get_message($value);
+
+        like $message_got, $message_check, $val_dd;
+    }
+}
+
+=head3 explanation_should_report_as
+
+    explanation_should_report_as($type, @value_explanation_check_pairs);
+    explanation_should_report_as($type,
+        # values       # explanation check
+        'example.com', [
+            qr< did not pass type constraint >,
+            qr< expects domain label count \(\?LD\) to be between 3 and 5>,
+            qr<\$_ appears to be a 2LD>,
+        ],
+        undef,         [
+            qr< did not pass type constraint >,
+            qr<\$_ is not a legal FQDN>,
+        ],
+    );
+
+Creates a subtest that confirms deeper explanation message output from L<Type::Tiny/validate_explain>
+against the value.  Unlike C<get_message>, C<validate_explain> actually needs failed values to
+report back a string message.  The second parameter to C<validate_explain> is not passed, so expect
+error messages that inspect C<$_>.
+
+The RHS should be an arrayref of regular expressions, since C<validate_explain> reports back an
+arrayref of strings.  Although, it can be anything that L<like|Test2::Tools::Compare> accepts, and
+since it's a looser check, gaps in the arrayref are allowed.
+
+=cut
+
+sub explanation_should_report_as {
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'explanation should report as',
+        \&_explanation_should_report_as_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _explanation_should_report_as_subtest {
+    my ($type, @pairs) = @_;
+
+    plan int( scalar(@pairs) / 2 );
+
+    foreach my $pair (pairs @pairs) {
+        my ($value, $explanation_check) = @$pair;
+        my $val_dd = _dd($value);
+
+        my $explanation_got = $type->validate_explain($value);
+
+        my @explanation_explain =
+            defined $explanation_got ? ( "Resulting Explanation:", map { "    $_" } @$explanation_got ) :
+            ()
+        ;
+        like $explanation_got, $explanation_check, $val_dd, @explanation_explain;
     }
 }
 

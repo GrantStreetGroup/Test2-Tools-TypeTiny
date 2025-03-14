@@ -126,6 +126,19 @@ sub string_test {
             [{}],    qr<Parameter to Ref\[\`a\] expected to be a Perl ref type; got HASH>,
             ['FOO'], qr<Parameter to Ref\[\`a\] expected to be a Perl ref type; got FOO>,
         );
+
+        message_should_report_as(
+            $type,
+            undef, qr<Undef did not pass type constraint "Ref">,
+        );
+        explanation_should_report_as(
+            $type,
+            undef, [
+                qr<^"Ref.*" is a subtype of "Defined">,
+                qr<^Undef did not pass type constraint "Defined">,
+                qr<^"Defined" is defined as:>,
+            ],
+        );
     };
 
     done_testing;
