@@ -12,10 +12,11 @@ use parent 'Exporter';
 use List::Util v1.29 qw< uniq shuffle pairmap pairs >;
 use Scalar::Util     qw< blessed refaddr >;
 
-use Test2::API            qw< context run_subtest >;
+use Test2::API              qw< context run_subtest >;
 use Test2::Tools::Basic;
-use Test2::Tools::Compare qw< is like >;
-use Test2::Compare        qw< compare strict_convert >;
+use Test2::Tools::Compare   qw< is like >;
+use Test2::Tools::Exception qw< lives dies >;
+use Test2::Compare          qw< compare strict_convert >;
 
 use Data::Dumper;
 
@@ -59,6 +60,17 @@ use namespace::clean;
             [qw< ftp001-prod3 ftp001-prod3.ourdomain.com prod-ask-me.ourdomain.com >],
         );
 
+        parameters_should_create_type(
+            $type,
+            [], [3], [0, 0], [1, 2],
+        );
+        parameters_should_die_as(
+            $type,
+            [],    qr<Parameter for .+ does not exist>,
+            [-3],  qr<Parameter for .+ is not a positive int>,
+            [0.2], qr<Parameter for .+ is not a positive int>,
+        );
+
         like $type->get_message(undef), qr<Must be a valid FQDN>, 'error message is correct';
         like $type->validate_explain(undef), [
             qr<Undef did not pass type constraint>,
@@ -81,8 +93,9 @@ All functions are exported by default.
 
 our @EXPORT_OK = (qw<
     type_subtest
-    should_pass_initially should_fail_initially should_pass should_fail
-    should_coerce_into should_sort_into
+    should_pass_initially should_fail_initially should_pass should_fail should_coerce_into
+    parameters_should_create_type parameters_should_die_as
+    should_sort_into
 >);
 our @EXPORT = @EXPORT_OK;
 
@@ -453,6 +466,104 @@ sub _should_coerce_into_subtest {
     }
 }
 
+=head3 parameters_should_create_type
+
+    parameters_should_create_type($type, @parameter_sets);
+    parameters_should_create_type($type,
+        [],
+        [3],
+        [0, 0],
+        [1, 2],
+    );
+
+Creates a subtest that confirms the type will successfully create a parameterized type with each of
+the set of parameters in C<@parameter_sets> (a list of arrayrefs).
+
+=cut
+
+sub parameters_should_create_type {
+    my $type = shift;
+    die $type->display_name." is not a parameterized type" unless $type->is_parameterizable;
+
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'parameters should create type',
+        \&_parameters_should_create_type_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        $type, @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _parameters_should_create_type_subtest {
+    my ($type, @parameter_sets) = @_;
+
+    plan scalar(@parameter_sets);
+
+    foreach my $parameter_set (@parameter_sets) {
+        my $val_dd = _dd($parameter_set);
+
+        # NOTE: lives is a separate statement, so that $@ is populated after failure
+        my $new_type;
+        my $ok = lives { $new_type = $type->of(@$parameter_set) };
+        ok($ok, $val_dd, "Reported exception: $@");
+
+        # XXX: no idea what it takes in, so just pass in a few values
+        next unless $new_type;
+        _check_error_message_methods($new_type, $_) for (1, 0, -1, undef, \"", {}, []);
+    }
+}
+
+=head3 parameters_should_die_as
+
+    parameters_should_die_as($type, @parameter_sets_exception_regex_pairs);
+    parameters_should_die_as($type,
+        # params  # exceptions
+        [],       qr<Parameter for .+ does not exist>,
+        [-3],     qr<Parameter for .+ is not a positive int>,
+        [0.2],    qr<Parameter for .+ is not a positive int>,
+    );
+
+Creates a subtest that confirms the type will fail validation (fatally) with the given parameters
+and exceptions.  The RHS should be an regular expression, but can be anything that
+L<like|Test2::Tools::Compare> accepts.
+
+=cut
+
+sub parameters_should_die_as {
+    my $type = shift;
+    die $type->display_name." is not a parameterized type" unless $type->is_parameterizable;
+
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'parameters should die as',
+        \&_parameters_should_die_as_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        $type, @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _parameters_should_die_as_subtest {
+    my ($type, @pairs) = @_;
+
+    plan int( scalar(@pairs) / 2 );
+
+    foreach my $pair (pairs @pairs) {
+        my ($parameter_set, $expected) = @$pair;
+        my $val_dd = _dd($parameter_set);
+
+        like(
+            dies { $type->of(@$parameter_set) },
+            $expected,
+            $val_dd,
+        );
+    }
+}
 
 =head3 should_sort_into
 
