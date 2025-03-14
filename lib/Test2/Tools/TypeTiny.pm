@@ -89,11 +89,15 @@ use namespace::clean;
 
 This module provides a set of tools for checking L<Type::Tiny> types.  This is similar to
 L<Test::TypeTiny>, but works against the L<Test2::Suite> and has more functionality for testing
-and troubleshooting coercions.
+and troubleshooting coercions, error messages, and other aspects of the type.
 
 =head1 FUNCTIONS
 
-All functions are exported by default.
+All functions are exported by default.  These functions create L<buffered subtests|Test2::Tools::Subtest/BUFFERED>
+to contain different classes of tests.
+
+Besides the wrapper itself, these functions are most useful wrapped inside of a L</type_subtest>
+coderef.
 
 =cut
 
@@ -116,10 +120,9 @@ our @EXPORT = @EXPORT_OK;
         ...
     };
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> with the given type as the test name,
-and passed as the only parameter.  Using a generic C<$type> variable makes it much easier to copy
-and paste test code from other type tests without accidentally forgetting to change your custom
-type within the code.
+Creates a subtest with the given type as the test name, and passed as the only parameter.  Using a
+generic C<$type> variable makes it much easier to copy and paste test code from other type tests
+without accidentally forgetting to change your custom type within the code.
 
 If the type can be inlined, this will also run two separate subtests (within the main type subtest)
 to check both the inlined constraint and the slower coderef constraint.  The second subtest will
@@ -206,20 +209,18 @@ sub _multi_type_split_subtest {
     return $orig_result && $inlineless_result;
 }
 
-=head2 Testers
+=head2 Value Testers
 
-These functions are most useful wrapped inside of a L</type_subtest> coderef.
-
-Note that most of these checks will run through C<get_message> and C<validate_explain> calls to
-confirm the coderefs don't die.  If you need to validate the error messages themselves, consider
-using checks similar to the ones in the L</SYNOPSIS>.
+Most of these checks will run through C<get_message> and C<validate_explain> calls to confirm the
+coderefs don't die.  If you need to validate the error messages themselves, consider using some of
+the L</Error Message Testers>.
 
 =head3 should_pass_initially
 
     should_pass_initially($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will pass with
-all of the given C<@values>, without any need for coercions.
+Creates a subtest that confirms the type will pass with all of the given C<@values>, without any
+need for coercions.
 
 =cut
 
@@ -254,8 +255,8 @@ sub _should_pass_initially_subtest {
 
     should_fail_initially($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will fail with
-all of the given C<@values>, without using any coercions.
+Creates a subtest that confirms the type will fail with all of the given C<@values>, without using
+any coercions.
 
 This function is included for completeness.  However, items in C<should_fail_initially> should
 realistically end up in either a L</should_fail> block (if it always fails, even with coercions) or
@@ -294,10 +295,9 @@ sub _should_fail_initially_subtest {
 
     should_pass($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will pass with
-all of the given C<@values>, including values that might need coercions.  If it initially passes,
-that's okay, too.  If the type does not have a coercion and it fails the initial check, it will
-stop there and fail the test.
+Creates a subtest that confirms the type will pass with all of the given C<@values>, including
+values that might need coercions.  If it initially passes, that's okay, too.  If the type does not
+have a coercion and it fails the initial check, it will stop there and fail the test.
 
 This function is included for completeness.  However, L</should_coerce_into> is the better function
 for types with known coercions, as it checks the resulting coerced values as well.
@@ -356,8 +356,8 @@ sub _should_pass_subtest {
 
     should_fail($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will fail with
-all of the given C<@values>, even when those values are ran through its coercions.
+Creates a subtest that confirms the type will fail with all of the given C<@values>, even when
+those values are ran through its coercions.
 
 =cut
 
@@ -412,11 +412,15 @@ sub _should_fail_subtest {
 =head3 should_coerce_into
 
     should_coerce_into($type, @orig_coerced_kv_pairs);
+    should_coerce_into($type,
+        # orig  # coerced
+        undef,  0,
+        [],     0,
+    );
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will take the
-"key" in C<@orig_coerced_kv_pairs> and coerce it into the "value" in C<@orig_coerced_kv_pairs>.
-(The C<@orig_coerced_kv_pairs> parameter is essentially an ordered hash here, with support for
-ref values as the "key".)
+Creates a subtest that confirms the type will take the "key" in C<@orig_coerced_kv_pairs> and
+coerce it into the "value" in C<@orig_coerced_kv_pairs>. (The C<@orig_coerced_kv_pairs> parameter
+is essentially an ordered hash here, with support for ref values as the "key".)
 
 The original value should not pass initial checks, as it would not be coerced in most use cases.
 These would be considered test failures.
@@ -472,6 +476,17 @@ sub _should_coerce_into_subtest {
         is $new_value, $expected, "$val_dd (coerced)", @val_explain, @coercion_debug;
     }
 }
+
+=head2 Parameter Testers
+
+These tests should only be used for parameter validation.  None of the resulting types are checked
+in other ways, so you should include other L<type subtests|/type_subtest> with different kinds of
+parameterized types.
+
+Note that L<inline generators|Type::Tiny/inline_generator> don't require any sort of validation
+because the L<constraint generator|Type::Tiny/constraint_generator> is always called first, and
+should die on parameter validation failure, prior to the C<inline_generator> call.  The same applies
+for coercion generators as well.
 
 =head3 parameters_should_create_type
 
@@ -571,6 +586,8 @@ sub _parameters_should_die_as_subtest {
         );
     }
 }
+
+=head2 Error Message Testers
 
 =head3 message_should_report_as
 
@@ -679,12 +696,14 @@ sub _explanation_should_report_as_subtest {
     }
 }
 
+=head2 Other Testers
+
 =head3 should_sort_into
 
     should_sort_into($type, @sorted_arrayrefs);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will sort
-into the expected lists given.  The input list is a shuffled version of the sorted list.
+Creates a subtest that confirms the type will sort into the expected lists given.  The input list
+is a shuffled version of the sorted list.
 
 Because this introduces some non-deterministic behavior to the test, it will run through 100 cycles
 of shuffling and sorting to confirm the results.  A good sorter should always return a
