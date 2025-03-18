@@ -12,10 +12,11 @@ use parent 'Exporter';
 use List::Util v1.29 qw< uniq shuffle pairmap pairs >;
 use Scalar::Util     qw< blessed refaddr >;
 
-use Test2::API            qw< context run_subtest >;
+use Test2::API              qw< context run_subtest >;
 use Test2::Tools::Basic;
-use Test2::Tools::Compare qw< is like >;
-use Test2::Compare        qw< compare strict_convert >;
+use Test2::Tools::Compare   qw< is like >;
+use Test2::Tools::Exception qw< lives dies >;
+use Test2::Compare          qw< compare strict_convert >;
 
 use Data::Dumper;
 
@@ -59,10 +60,27 @@ use namespace::clean;
             [qw< ftp001-prod3 ftp001-prod3.ourdomain.com prod-ask-me.ourdomain.com >],
         );
 
-        like $type->get_message(undef), qr<Must be a valid FQDN>, 'error message is correct';
-        like $type->validate_explain(undef), [
-            qr<Undef did not pass type constraint>,
-        ], 'deep explanation is correct';
+        parameters_should_create_type(
+            $type,
+            [], [3], [0, 0], [1, 2],
+        );
+        parameters_should_die_as(
+            $type,
+            [],    qr<Parameter for .+ does not exist>,
+            [-3],  qr<Parameter for .+ is not a positive int>,
+            [0.2], qr<Parameter for .+ is not a positive int>,
+        );
+
+        message_should_report_as(
+            $type,
+            undef, qr<Must be a valid FQDN>
+        );
+        explanation_should_report_as(
+            $type,
+            undef, [
+                qr<Undef did not pass type constraint>,
+            ],
+        );
     };
 
     done_testing;
@@ -71,18 +89,24 @@ use namespace::clean;
 
 This module provides a set of tools for checking L<Type::Tiny> types.  This is similar to
 L<Test::TypeTiny>, but works against the L<Test2::Suite> and has more functionality for testing
-and troubleshooting coercions.
+and troubleshooting coercions, error messages, and other aspects of the type.
 
 =head1 FUNCTIONS
 
-All functions are exported by default.
+All functions are exported by default.  These functions create L<buffered subtests|Test2::Tools::Subtest/BUFFERED>
+to contain different classes of tests.
+
+Besides the wrapper itself, these functions are most useful wrapped inside of a L</type_subtest>
+coderef.
 
 =cut
 
 our @EXPORT_OK = (qw<
     type_subtest
-    should_pass_initially should_fail_initially should_pass should_fail
-    should_coerce_into should_sort_into
+    should_pass_initially should_fail_initially should_pass should_fail should_coerce_into
+    parameters_should_create_type parameters_should_die_as
+    message_should_report_as explanation_should_report_as
+    should_sort_into
 >);
 our @EXPORT = @EXPORT_OK;
 
@@ -96,10 +120,9 @@ our @EXPORT = @EXPORT_OK;
         ...
     };
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> with the given type as the test name,
-and passed as the only parameter.  Using a generic C<$type> variable makes it much easier to copy
-and paste test code from other type tests without accidentally forgetting to change your custom
-type within the code.
+Creates a subtest with the given type as the test name, and passed as the only parameter.  Using a
+generic C<$type> variable makes it much easier to copy and paste test code from other type tests
+without accidentally forgetting to change your custom type within the code.
 
 If the type can be inlined, this will also run two separate subtests (within the main type subtest)
 to check both the inlined constraint and the slower coderef constraint.  The second subtest will
@@ -186,20 +209,18 @@ sub _multi_type_split_subtest {
     return $orig_result && $inlineless_result;
 }
 
-=head2 Testers
+=head2 Value Testers
 
-These functions are most useful wrapped inside of a L</type_subtest> coderef.
-
-Note that most of these checks will run through C<get_message> and C<validate_explain> calls to
-confirm the coderefs don't die.  If you need to validate the error messages themselves, consider
-using checks similar to the ones in the L</SYNOPSIS>.
+Most of these checks will run through C<get_message> and C<validate_explain> calls to confirm the
+coderefs don't die.  If you need to validate the error messages themselves, consider using some of
+the L</Error Message Testers>.
 
 =head3 should_pass_initially
 
     should_pass_initially($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will pass with
-all of the given C<@values>, without any need for coercions.
+Creates a subtest that confirms the type will pass with all of the given C<@values>, without any
+need for coercions.
 
 =cut
 
@@ -234,8 +255,8 @@ sub _should_pass_initially_subtest {
 
     should_fail_initially($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will fail with
-all of the given C<@values>, without using any coercions.
+Creates a subtest that confirms the type will fail with all of the given C<@values>, without using
+any coercions.
 
 This function is included for completeness.  However, items in C<should_fail_initially> should
 realistically end up in either a L</should_fail> block (if it always fails, even with coercions) or
@@ -274,10 +295,9 @@ sub _should_fail_initially_subtest {
 
     should_pass($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will pass with
-all of the given C<@values>, including values that might need coercions.  If it initially passes,
-that's okay, too.  If the type does not have a coercion and it fails the initial check, it will
-stop there and fail the test.
+Creates a subtest that confirms the type will pass with all of the given C<@values>, including
+values that might need coercions.  If it initially passes, that's okay, too.  If the type does not
+have a coercion and it fails the initial check, it will stop there and fail the test.
 
 This function is included for completeness.  However, L</should_coerce_into> is the better function
 for types with known coercions, as it checks the resulting coerced values as well.
@@ -336,8 +356,8 @@ sub _should_pass_subtest {
 
     should_fail($type, @values);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will fail with
-all of the given C<@values>, even when those values are ran through its coercions.
+Creates a subtest that confirms the type will fail with all of the given C<@values>, even when
+those values are ran through its coercions.
 
 =cut
 
@@ -392,11 +412,15 @@ sub _should_fail_subtest {
 =head3 should_coerce_into
 
     should_coerce_into($type, @orig_coerced_kv_pairs);
+    should_coerce_into($type,
+        # orig  # coerced
+        undef,  0,
+        [],     0,
+    );
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will take the
-"key" in C<@orig_coerced_kv_pairs> and coerce it into the "value" in C<@orig_coerced_kv_pairs>.
-(The C<@orig_coerced_kv_pairs> parameter is essentially an ordered hash here, with support for
-ref values as the "key".)
+Creates a subtest that confirms the type will take the "key" in C<@orig_coerced_kv_pairs> and
+coerce it into the "value" in C<@orig_coerced_kv_pairs>. (The C<@orig_coerced_kv_pairs> parameter
+is essentially an ordered hash here, with support for ref values as the "key".)
 
 The original value should not pass initial checks, as it would not be coerced in most use cases.
 These would be considered test failures.
@@ -453,13 +477,233 @@ sub _should_coerce_into_subtest {
     }
 }
 
+=head2 Parameter Testers
+
+These tests should only be used for parameter validation.  None of the resulting types are checked
+in other ways, so you should include other L<type subtests|/type_subtest> with different kinds of
+parameterized types.
+
+Note that L<inline generators|Type::Tiny/inline_generator> don't require any sort of validation
+because the L<constraint generator|Type::Tiny/constraint_generator> is always called first, and
+should die on parameter validation failure, prior to the C<inline_generator> call.  The same applies
+for coercion generators as well.
+
+=head3 parameters_should_create_type
+
+    parameters_should_create_type($type, @parameter_sets);
+    parameters_should_create_type($type,
+        [],
+        [3],
+        [0, 0],
+        [1, 2],
+    );
+
+Creates a subtest that confirms the type will successfully create a parameterized type with each of
+the set of parameters in C<@parameter_sets> (a list of arrayrefs).
+
+=cut
+
+sub parameters_should_create_type {
+    my $type = shift;
+    die $type->display_name." is not a parameterized type" unless $type->is_parameterizable;
+
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'parameters should create type',
+        \&_parameters_should_create_type_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        $type, @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _parameters_should_create_type_subtest {
+    my ($type, @parameter_sets) = @_;
+
+    plan scalar(@parameter_sets);
+
+    foreach my $parameter_set (@parameter_sets) {
+        my $val_dd = _dd($parameter_set);
+
+        # NOTE: lives is a separate statement, so that $@ is populated after failure
+        my $new_type;
+        my $ok = lives { $new_type = $type->of(@$parameter_set) };
+        ok($ok, $val_dd, "Reported exception: $@");
+
+        # XXX: no idea what it takes in, so just pass in a few values
+        next unless $new_type;
+        _check_error_message_methods($new_type, $_) for (1, 0, -1, undef, \"", {}, []);
+    }
+}
+
+=head3 parameters_should_die_as
+
+    parameters_should_die_as($type, @parameter_sets_exception_regex_pairs);
+    parameters_should_die_as($type,
+        # params  # exceptions
+        [],       qr<Parameter for .+ does not exist>,
+        [-3],     qr<Parameter for .+ is not a positive int>,
+        [0.2],    qr<Parameter for .+ is not a positive int>,
+    );
+
+Creates a subtest that confirms the type will fail validation (fatally) with the given parameters
+and exceptions.  The RHS should be an regular expression, but can be anything that
+L<like|Test2::Tools::Compare> accepts.
+
+=cut
+
+sub parameters_should_die_as {
+    my $type = shift;
+    die $type->display_name." is not a parameterized type" unless $type->is_parameterizable;
+
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'parameters should die as',
+        \&_parameters_should_die_as_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        $type, @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _parameters_should_die_as_subtest {
+    my ($type, @pairs) = @_;
+
+    plan int( scalar(@pairs) / 2 );
+
+    foreach my $pair (pairs @pairs) {
+        my ($parameter_set, $expected) = @$pair;
+        my $val_dd = _dd($parameter_set);
+
+        like(
+            dies { $type->of(@$parameter_set) },
+            $expected,
+            $val_dd,
+        );
+    }
+}
+
+=head2 Error Message Testers
+
+=head3 message_should_report_as
+
+    message_should_report_as($type, @value_message_regex_pairs);
+    message_should_report_as($type,
+        # values       # messages
+        1,             qr<Must be a fully-qualified domain name, not 1>,
+        undef,         qr!Must be a fully-qualified domain name, not <undef>!,
+        # valid value; checking message, anyway
+        'example.com', qr<Must be a fully-qualified domain name, not example.com>,
+    );
+
+Creates a subtest that confirms error message output against the value.  Technically,
+L<Type::Tiny/get_message> works for valid values, too, so this isn't actually trapping assertion
+failures, just checking the output of that method.
+
+The RHS should be an regular expression, but it can be anything that L<like|Test2::Tools::Compare>
+accepts.
+
+=cut
+
+sub message_should_report_as {
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'message should report as',
+        \&_message_should_report_as_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _message_should_report_as_subtest {
+    my ($type, @pairs) = @_;
+
+    plan int( scalar(@pairs) / 2 );
+
+    foreach my $pair (pairs @pairs) {
+        my ($value, $message_check) = @$pair;
+        my $val_dd = _dd($value);
+
+        my $message_got = $type->get_message($value);
+
+        like $message_got, $message_check, $val_dd;
+    }
+}
+
+=head3 explanation_should_report_as
+
+    explanation_should_report_as($type, @value_explanation_check_pairs);
+    explanation_should_report_as($type,
+        # values       # explanation check
+        'example.com', [
+            qr< did not pass type constraint >,
+            qr< expects domain label count \(\?LD\) to be between 3 and 5>,
+            qr<\$_ appears to be a 2LD>,
+        ],
+        undef,         [
+            qr< did not pass type constraint >,
+            qr<\$_ is not a legal FQDN>,
+        ],
+    );
+
+Creates a subtest that confirms deeper explanation message output from L<Type::Tiny/validate_explain>
+against the value.  Unlike C<get_message>, C<validate_explain> actually needs failed values to
+report back a string message.  The second parameter to C<validate_explain> is not passed, so expect
+error messages that inspect C<$_>.
+
+The RHS should be an arrayref of regular expressions, since C<validate_explain> reports back an
+arrayref of strings.  Although, it can be anything that L<like|Test2::Tools::Compare> accepts, and
+since it's a looser check, gaps in the arrayref are allowed.
+
+=cut
+
+sub explanation_should_report_as {
+    my $ctx  = context();
+    my $pass = run_subtest(
+        'explanation should report as',
+        \&_explanation_should_report_as_subtest,
+        { buffered => 1, inherit_trace => 1 },
+        @_,
+    );
+    $ctx->release;
+
+    return $pass;
+}
+
+sub _explanation_should_report_as_subtest {
+    my ($type, @pairs) = @_;
+
+    plan int( scalar(@pairs) / 2 );
+
+    foreach my $pair (pairs @pairs) {
+        my ($value, $explanation_check) = @$pair;
+        my $val_dd = _dd($value);
+
+        my $explanation_got = $type->validate_explain($value);
+
+        my @explanation_explain =
+            defined $explanation_got ? ( "Resulting Explanation:", map { "    $_" } @$explanation_got ) :
+            ()
+        ;
+        like $explanation_got, $explanation_check, $val_dd, @explanation_explain;
+    }
+}
+
+=head2 Other Testers
 
 =head3 should_sort_into
 
     should_sort_into($type, @sorted_arrayrefs);
 
-Creates a L<buffered subtest|Test2::Tools::Subtest/BUFFERED> that confirms the type will sort
-into the expected lists given.  The input list is a shuffled version of the sorted list.
+Creates a subtest that confirms the type will sort into the expected lists given.  The input list
+is a shuffled version of the sorted list.
 
 Because this introduces some non-deterministic behavior to the test, it will run through 100 cycles
 of shuffling and sorting to confirm the results.  A good sorter should always return a
