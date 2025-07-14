@@ -22,6 +22,8 @@ use Data::Dumper;
 
 use namespace::clean;
 
+our $DEBUG_INDENT = 4;
+
 =encoding utf8
 
 =head1 SYNOPSIS
@@ -782,9 +784,9 @@ sub _constraint_type_check_debug_map {
         my $check     = $current_check->check($value);
 
         my $check_label = $check ? 'PASSED' : 'FAILED';
-        push @diag_map, sprintf("    %s->check(%s) ==> %s", $type_name, $dd, $check_label);
+        push @diag_map, sprintf('%*s%s->check(%s) ==> %s', $DEBUG_INDENT, '', $type_name, $dd, $check_label);
         local $SIG{__WARN__} = sub {};
-        push @diag_map, sprintf('        is defined as: %s', $current_check->_perlcode);
+        push @diag_map, sprintf('%*s%s: %s', $DEBUG_INDENT * 2, '', 'is defined as', $current_check->_perlcode);
 
         $current_check = $current_check->parent;
     };
@@ -799,7 +801,7 @@ sub _coercion_type_check_debug_map {
 
     my @diag_map = ($type->display_name." coercion map:");
     if (length $dd > 30) {
-        push @diag_map, "    Full value: $dd";
+        push @diag_map, sprintf('%*s%s: %s', $DEBUG_INDENT, '', 'Full value', $dd);
         $dd = '...';
     }
 
@@ -810,7 +812,7 @@ sub _coercion_type_check_debug_map {
         my $check_label = $check ? 'PASSED' : 'FAILED';
         $check_label .= sprintf ' (coerced into %s)', _dd($type->coerce($value)) if $check && $coercion_type != $type;
 
-        push @diag_map, sprintf("    %s->check(%s) ==> %s", $type_name, $dd, $check_label);
+        push @diag_map, sprintf('%*s%s->check(%s) ==> %s', $DEBUG_INDENT, '', $type_name, $dd, $check_label);
         last if $check;
     }
 
