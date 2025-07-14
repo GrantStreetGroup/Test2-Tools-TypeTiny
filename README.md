@@ -4,7 +4,7 @@ Test2::Tools::TypeTiny - Test2 tools for checking Type::Tiny types
 
 # VERSION
 
-version v0.93.0
+version v0.93.1
 
 # SYNOPSIS
 
@@ -301,8 +301,10 @@ For example, a constraint map could look like:
 
     MyStringType constraint map:
         MyStringType->check("value") ==> FAILED
+            message: Must be a good value
             is defined as: do { package Type::Tiny; ... ) }
         StrMatch["(?^ux:...)"]->check("value") ==> FAILED
+            message: StrMatch did not pass type constraint: ...
             is defined as: do { package Type::Tiny; !ref($_) and !!( $_ =~ $Types::Standard::StrMatch::expressions{"..."} ) }
         StrMatch->check("value") ==> PASSED
             is defined as: do { package Type::Tiny; defined($_) and do { ref(\$_) eq 'SCALAR' or ref(\(my $val = $_)) eq 'SCALAR' } }
