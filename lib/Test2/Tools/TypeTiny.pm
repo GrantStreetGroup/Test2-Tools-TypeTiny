@@ -785,6 +785,25 @@ sub _constraint_type_check_debug_map {
 
         my $check_label = $check ? 'PASSED' : 'FAILED';
         push @diag_map, sprintf('%*s%s->check(%s) ==> %s', $DEBUG_INDENT, '', $type_name, $dd, $check_label);
+
+        # Advertize failure message and deeper explanations
+        unless ($check) {
+            push @diag_map, sprintf('%*s%s: %s', $DEBUG_INDENT * 2, '', 'message', $current_check->get_message($value));
+
+            if ($current_check->is_parameterized && $current_check->parent->has_deep_explanation) {
+                push @diag_map, sprintf('%*s%s:', $DEBUG_INDENT * 2, '', 'parameterized deep explanation (from parent)');
+                my $deep = eval { $current_check->parent->deep_explanation->( $current_check, $value, '$_' ) };
+
+                # Account for bugs in parent->deep_explanation
+                push @diag_map, (
+                    $@                   ? sprintf('%*s%s: %s', $DEBUG_INDENT * 3, '', 'EVAL ERROR', $@) :
+                    !defined $deep       ? sprintf('%*s%s',     $DEBUG_INDENT * 3, '', 'NO RESULTS') :
+                    ref $deep ne 'ARRAY' ? sprintf('%*s%s: %s', $DEBUG_INDENT * 3, '', 'ILLEGAL RETURN TYPE', ref $deep) :
+                    (map { sprintf('%*s%s', $DEBUG_INDENT * 3, '', $_) } @$deep)
+                );
+            }
+        }
+
         local $SIG{__WARN__} = sub {};
         push @diag_map, sprintf('%*s%s: %s', $DEBUG_INDENT * 2, '', 'is defined as', $current_check->_perlcode);
 
@@ -876,8 +895,10 @@ For example, a constraint map could look like:
 
     MyStringType constraint map:
         MyStringType->check("value") ==> FAILED
+            message: Must be a good value
             is defined as: do { package Type::Tiny; ... ) }
         StrMatch["(?^ux:...)"]->check("value") ==> FAILED
+            message: StrMatch did not pass type constraint: ...
             is defined as: do { package Type::Tiny; !ref($_) and !!( $_ =~ $Types::Standard::StrMatch::expressions{"..."} ) }
         StrMatch->check("value") ==> PASSED
             is defined as: do { package Type::Tiny; defined($_) and do { ref(\$_) eq 'SCALAR' or ref(\(my $val = $_)) eq 'SCALAR' } }
