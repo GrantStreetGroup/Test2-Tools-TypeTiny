@@ -761,6 +761,7 @@ sub _should_sort_into_subtest {
 
 # Helpers
 sub _dd {
+    local $SIG{__WARN__} = sub {};
     my $dd  = Data::Dumper->new([ shift ])->Terse(1)->Indent(0)->Useqq(1)->Deparse(1)->Quotekeys(0)->Sortkeys(1)->Maxdepth(2);
     my $val = $dd->Dump;
     $val =~ s/\s+/ /gs;
