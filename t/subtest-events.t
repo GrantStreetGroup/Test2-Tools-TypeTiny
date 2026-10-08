@@ -15,6 +15,15 @@ use Test2::Tools::Subtest qw< subtest_buffered >;
 use List::Util   qw< first >;
 use Scalar::Util qw< blessed >;
 
+# Detect the line number reporting behaviour of this version of perl
+our $use_block_end;
+BEGIN {
+    sub X { my (undef, undef, $line) = caller;
+                $use_block_end++ if ($line != shift); }
+    X __LINE__, # $use_block_end = 0
+    sub { }     # $use_block_end = 1
+};
+
 ###################################################################################################
 
 my $events = intercept { StrTest::string_test(1); };
@@ -51,6 +60,8 @@ my @subtest_events = grep { blessed $_ eq 'Test2::Event::Subtest' } $events->eve
 is( $subtest_events[0]->pass, 0, 'StrMatch subtest failed');
 is( $subtest_events[1]->pass, 1, 'First Enum subtest passed');
 is( $subtest_events[2]->pass, 0, 'Second Enum subtest failed');
+
+my $diag_line = $use_block_end ? 51 : 22;
 
 subtest_buffered 'Failed StrMatch subtest' => sub {
     my $event_tester_tree = events_tester_tree($subtest_events[0]);
@@ -90,9 +101,9 @@ subtest_buffered 'Failed StrMatch subtest' => sub {
         { $test_name, [
             'Plan',
             { 'original type'    => $subtype_compare },
-            qr<Diag: Failed test .+\nat t/lib/StrTest\.pm line 51\.>,
+            qr<Diag: Failed test .+\nat t/lib/StrTest\.pm line $diag_line\.>,
             { 'inline-less type' => $subtype_compare },
-            qr<Diag: Failed test .+\nat t/lib/StrTest\.pm line 51\.>,
+            qr<Diag: Failed test .+\nat t/lib/StrTest\.pm line $diag_line\.>,
         ] },
         'StrMatch pass/fail order is correct',
     );
